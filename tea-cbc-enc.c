@@ -30,85 +30,65 @@ void encode(uint32_t v[2], const uint32_t k[4]) {
 }
 
 
-int main(int argc, char** argv){
+int main(int argc, char** argv) {
+    if (argc != 5) {
+        printf("Usage: %s <IV file> <Key file> <Plaintext file> <Ciphertext file>\n", argv[0]);
+        return -1;
+    }
 
-    // Set file pointers and report errors
-    // Initial value
     ivFileName = argv[1];
-    printf("-- IV file name: %s\n", ivFileName);
-    ivFile = fopen(ivFileName, "r");
-    if(!ivFile) {
-        printf("--- Could not open file %s \n", ivFileName);
-        return -1;
-    }
-
-    // Key File
     keyFileName = argv[2];
-    printf("-- Key file name: %s\n", keyFileName);
-    keyFile = fopen(keyFileName, "r");
-    if(!keyFile) {
-        printf("--- Could not open file %s \n", keyFileName);
-        return -1;
-    }
-
-    // Plain Text File 
     plainTextFileName = argv[3];
-    printf("-- Plain text file name: %s\n", plainTextFileName);
-    plainTextFile = fopen(plainTextFileName, "rb");
-    if(!plainTextFileName) {
-        printf("--- Could not open file %s \n", plainTextFileName);
-        return -1;
-    }
-
-    // Cipher Text File
     cipherTextFileName = argv[4];
-    printf("-- Cipher text file name: %s\n", cipherTextFileName);
-    cipherTextFile = fopen(cipherTextFileName, "w");
-    if(!cipherTextFileName) {
-        printf("--- Could not open file %s \n", cipherTextFileName);
+
+    ivFile = fopen(ivFileName, "rb");
+    keyFile = fopen(keyFileName, "rb");
+    plainTextFile = fopen(plainTextFileName, "rb");
+    cipherTextFile = fopen(cipherTextFileName, "wb");
+
+    if (!ivFile || !keyFile || !plainTextFile || !cipherTextFile) {
+        printf("Error opening one or more files.\n");
         return -1;
     }
 
-    printf("- Initialized files: %s, %s, %s \n", keyFileName, plainTextFileName, cipherTextFileName);
-
-    // Buffer to be used to store 2 32 bit blocks
     uint32_t *v = (uint32_t*)calloc(2, sizeof(uint32_t));
-    // Buffer to store IV value and feedback value
     uint32_t *v2 = (uint32_t*)calloc(2, sizeof(uint32_t));
-    // Buffer to store 128 bit key
     uint32_t *k = (uint32_t*)calloc(4, sizeof(uint32_t));
+    fread(k, sizeof(uint32_t), 4, keyFile);
+    fread(v2, sizeof(uint32_t), 2, ivFile);
 
-    // Initialize buffers to null
-    v[0] = 0; v[1] = 0; v2[0] = 0; v2[1] = 0;
-    k[0] = 0; k[1] = 0; k[2] = 0; k[3] = 0;
-    
-    // Read key file into buffer k
-    fread(k, sizeof(*k), 4, keyFile);
-    // Load IV into buffer v2
-    fread(v2, sizeof(*v2), 2, ivFile);
-
-    // Iterate over plaintext
     int blockNum = 0;
-    printf("Starting encode \n");
-    while(fread(v, sizeof(*v), 2, plainTextFile) > 0) {
-        // Inc block #
-        printf("Encoding block #: %d \n", blockNum++);
-        // XOR plaintext block n with either IV or feedback value
+    while (1) {
+        size_t bytesRead = fread(v, sizeof(uint32_t), 2, plainTextFile);
+        if (bytesRead == 0) break;
+
+        if (bytesRead < 2) {
+            printf("Padding added to last block\n");
+            uint8_t *vBytes = (uint8_t *)v;
+            size_t totalBytes = bytesRead * sizeof(uint32_t);
+            uint8_t padVal = 8 - totalBytes;
+            for (size_t i = totalBytes; i < 8; i++) {
+                vBytes[i] = padVal;
+            }
+        }
+
         v[0] ^= v2[0];
         v[1] ^= v2[1];
-        // Run the encoding
         encode(v, k);
-        // Write to cipher file
-        fwrite(v, sizeof(v[0]), 2, cipherTextFile);
-        // Set feedback value and reset buffer v to null
-        v2[0] = v[0]; v2[1] = v[1];
-        v[0] = 0; v[1] = 0;
+        fwrite(v, sizeof(uint32_t), 2, cipherTextFile);
+
+        v2[0] = v[0];
+        v2[1] = v[1];
+        v[0] = 0;
+        v[1] = 0;
+
+        if (bytesRead < 2) break;
     }
 
-    printf("Encoding complete. See: %s \n", cipherTextFileName);
-    // Close files
+    fclose(ivFile);
+    fclose(keyFile);
     fclose(plainTextFile);
     fclose(cipherTextFile);
-    fclose(keyFile);
+    free(v); free(v2); free(k);
     return 0;
 }
