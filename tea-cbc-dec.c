@@ -16,16 +16,28 @@ FILE *cipherTextFile = NULL;
 FILE *ivFile = NULL;
 
 // TEA decode
-void decode(uint32_t v[2], const uint32_t k[4]) {
-    uint32_t v0=v[0], v1=v[1], sum=0xC6EF3720, i;  /* set up; sum is (delta << 5) & 0xFFFFFFFF */
-    uint32_t delta=0x9E3779B9;                     /* a key schedule constant */
-    uint32_t k0=k[0], k1=k[1], k2=k[2], k3=k[3];   /* cache key */
-    for (i=0; i<32; i++) {                         /* basic cycle start */
-        v1 -= ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3);
-        v0 -= ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+// void decode(uint32_t v[2], const uint32_t k[4]) {
+//     uint32_t v0=v[0], v1=v[1], sum=0xC6EF3720, i;  /* set up; sum is (delta << 5) & 0xFFFFFFFF */
+//     uint32_t delta=0x9E3779B9;                     /* a key schedule constant */
+//     uint32_t k0=k[0], k1=k[1], k2=k[2], k3=k[3];   /* cache key */
+//     for (i=0; i<32; i++) {                         /* basic cycle start */
+//         v1 -= ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3);
+//         v0 -= ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+//         sum -= delta;
+//     }                                              /* end cycle */
+//     v[0]=v0; v[1]=v1;
+// }
+
+void xtea_decode(uint32_t v[2], const uint32_t k[4]) {
+    uint32_t v0 = v[0], v1 = v[1];
+    const uint32_t delta = 0x9E3779B9;
+    uint32_t sum = delta * 32;  // same as 0xC6EF3720
+    for (uint32_t i = 0; i < 32; i++) {
+        v1 -= (((v0 << 4) ^ (v0 >> 5)) + v0) ^ (sum + k[(sum >> 11) & 3]);
         sum -= delta;
-    }                                              /* end cycle */
-    v[0]=v0; v[1]=v1;
+        v0 -= (((v1 << 4) ^ (v1 >> 5)) + v1) ^ (sum + k[sum & 3]);
+    }
+    v[0] = v0; v[1] = v1;
 }
 
 
@@ -62,7 +74,7 @@ int main(int argc, char** argv) {
         if (bytesRead == 0) break;
 
         v3[0] = v[0]; v3[1] = v[1];
-        decode(v, k);
+        xtea_decode(v, k);
         v[0] ^= v2[0];
         v[1] ^= v2[1];
 

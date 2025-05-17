@@ -16,17 +16,29 @@ FILE *cipherTextFile = NULL;
 FILE *ivFile = NULL;
 
 // TEA encode
-void encode(uint32_t v[2], const uint32_t k[4]) {
-    uint32_t v0=v[0], v1=v[1], sum=0, i;           /* set up */
-    uint32_t delta=0x9E3779B9;                     /* a key schedule constant */
-    uint32_t k0=k[0], k1=k[1], k2=k[2], k3=k[3];   /* cache key */
-    for (i=0; i<32; i++) {                         /* basic cycle start */
+// void encode(uint32_t v[2], const uint32_t k[4]) {
+//     uint32_t v0=v[0], v1=v[1], sum=0, i;           /* set up */
+//     uint32_t delta=0x9E3779B9;                     /* a key schedule constant */
+//     uint32_t k0=k[0], k1=k[1], k2=k[2], k3=k[3];   /* cache key */
+//     for (i=0; i<32; i++) {                         /* basic cycle start */
+//         sum += delta;
+//         v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+//         v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3);
+//     }                                              /* end cycle */
+//     v[0]=v0; v[1]=v1;
+//     return;
+// }
+
+void xtea_encode(uint32_t v[2], const uint32_t k[4]) {
+    uint32_t v0 = v[0], v1 = v[1];
+    uint32_t sum = 0;
+    const uint32_t delta = 0x9E3779B9;
+    for (uint32_t i = 0; i < 32; i++) {
+        v0 += (((v1 << 4) ^ (v1 >> 5)) + v1) ^ (sum + k[sum & 3]);
         sum += delta;
-        v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
-        v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3);
-    }                                              /* end cycle */
-    v[0]=v0; v[1]=v1;
-    return;
+        v1 += (((v0 << 4) ^ (v0 >> 5)) + v0) ^ (sum + k[(sum >> 11) & 3]);
+    }
+    v[0] = v0; v[1] = v1;
 }
 
 
@@ -74,7 +86,7 @@ int main(int argc, char** argv) {
 
         v[0] ^= v2[0];
         v[1] ^= v2[1];
-        encode(v, k);
+        xtea_encode(v, k);
         fwrite(v, sizeof(uint32_t), 2, cipherTextFile);
 
         v2[0] = v[0];
