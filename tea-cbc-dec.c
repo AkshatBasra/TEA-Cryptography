@@ -28,9 +28,35 @@ FILE *ivFile = NULL;
 //     v[0]=v0; v[1]=v1;
 // }
 
-void xtea_decode(uint32_t v[2], const uint32_t k[4]) {
+uint32_t extract_constant(const uint32_t k[4]) {
+    uint32_t result = 0;
+
+    int bit_positions[32];
+    for (int i = 0; i < 32; ++i) {
+        bit_positions[i] = i * 4;
+    }
+
+    for (int i = 0; i < 32; ++i) {
+        int bit_pos = bit_positions[i];
+
+        if (bit_pos < 0 || bit_pos > 127) {
+            fprintf(stderr, "Invalid bit position: %d\n", bit_pos);
+            return 0;
+        }
+
+        int word_index = bit_pos / 32;
+        int bit_index  = 31 - (bit_pos % 32); // MSB-first bit order
+
+        uint32_t bit = (k[word_index] >> bit_index) & 1;
+        result = (result << 1) | bit;
+    }
+
+    return result;
+}
+
+void xtea_decode(uint32_t v[2], const uint32_t k[4], const uint32_t delta) {
     uint32_t v0 = v[0], v1 = v[1];
-    const uint32_t delta = 0x9E3779B9;
+    // const uint32_t delta = 0x9E3779B9;
     uint32_t sum = delta * 32;  // same as 0xC6EF3720
     for (uint32_t i = 0; i < 32; i++) {
         v1 -= (((v0 << 4) ^ (v0 >> 5)) + v0) ^ (sum + k[(sum >> 11) & 3]);
@@ -69,12 +95,24 @@ int main(int argc, char** argv) {
     fread(k, sizeof(uint32_t), 4, keyFile);
     fread(v2, sizeof(uint32_t), 2, ivFile);
 
+    uint32_t delta = extract_constant(k);
+    if (delta == 0) {
+        printf("Error extracting constant from key.\n");
+        fclose(ivFile);
+        fclose(keyFile);
+        fclose(plainTextFile);
+        fclose(cipherTextFile);
+        free(v); free(v2); free(v3); free(k);
+        return -1;
+    }
+    printf("Extracted constant: %08X\n", delta);
+
     while (1) {
         size_t bytesRead = fread(v, sizeof(uint32_t), 2, plainTextFile);
         if (bytesRead == 0) break;
 
         v3[0] = v[0]; v3[1] = v[1];
-        xtea_decode(v, k);
+        xtea_decode(v, k, delta);
         v[0] ^= v2[0];
         v[1] ^= v2[1];
 
